@@ -195,8 +195,21 @@ class SeedVR2:
         
         # Download custom VAE if specified and different from default
         if vae_model and vae_model != DEFAULT_VAE:
-            if not download_weight(vae_model, debug=self.debug):
-                self.debug.log(f"Warning: Could not download VAE {vae_model}, will try to use it if already present", 
+            from ..utils.constants import find_model_file
+            # Check if VAE exists locally
+            try:
+                vae_path = find_model_file(vae_model, get_base_cache_dir())
+                if not os.path.exists(vae_path):
+                    # Try to download
+                    if not download_weight(vae_model, debug=self.debug):
+                        raise RuntimeError(
+                            f"VAE model {vae_model} not found locally and download failed. "
+                            f"Please download manually to ComfyUI/models/SEEDVR2/"
+                        )
+            except Exception as e:
+                self.debug.log(f"Error checking/downloading VAE {vae_model}: {e}", 
+                             level="WARNING", category="setup", force=True)
+                self.debug.log("Will attempt to proceed with pipeline, but may fail if VAE is not found", 
                              level="WARNING", category="setup", force=True)
 
         cfg_scale = 1.0

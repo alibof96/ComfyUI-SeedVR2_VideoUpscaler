@@ -49,6 +49,8 @@ MODEL_REGISTRY = {
     
     # VAE models
     "ema_vae_fp16.safetensors": ModelInfo(category="vae", precision="fp16", sha256="20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1"),
+    # TODO: Add SHA256 hash for taew2_1.safetensors once stable version is confirmed
+    # This enables integrity validation during download
     "taew2_1.safetensors": ModelInfo(repo="lightx2v/Autoencoders", category="vae", precision="fp16", variant="lightvae", sha256=None),  # LightVAE temporal autoencoder from LightX2V project
 }
 

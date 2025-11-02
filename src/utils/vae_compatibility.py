@@ -18,12 +18,16 @@ def validate_vae_compatibility(vae_path: str,
     Args:
         vae_path: Path to VAE safetensors file
         expected_latent_channels: Expected latent space channels (default: 16)
-        expected_spatial_downsample: Expected spatial downsampling factor (default: 8)
-        expected_temporal_downsample: Expected temporal downsampling factor (default: 4)
+        expected_spatial_downsample: Expected spatial downsampling factor (default: 8) - for informational logging only
+        expected_temporal_downsample: Expected temporal downsampling factor (default: 4) - for informational logging only
         debug: Optional debug instance for logging
         
     Returns:
         Tuple of (is_compatible: bool, message: str)
+        
+    Note:
+        Spatial and temporal downsample factors are architecture-specific and cannot be directly
+        validated from the weight file structure. They are passed for logging purposes only.
     """
     try:
         # Load VAE weights to inspect shapes
@@ -80,6 +84,7 @@ def validate_vae_compatibility(vae_path: str,
                 debug.log(f"  - Encoder layers: {len(encoder_keys)}", category="vae")
                 debug.log(f"  - Decoder layers: {len(decoder_keys)}", category="vae")
                 debug.log(f"  - Latent channels: {expected_latent_channels} (validated)", category="vae")
+                debug.log(f"  - Expected downsampling: spatial={expected_spatial_downsample}x, temporal={expected_temporal_downsample}x", category="vae")
             
             return True, "VAE compatibility validated successfully"
             

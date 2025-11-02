@@ -225,9 +225,11 @@ def configure_runner(model: str, base_cache_dir: str, preserve_vram: bool = Fals
     
     # Validate VAE compatibility
     debug.log(f"Validating VAE compatibility: {vae_checkpoint_name}", category="vae")
+    # Use getattr for OmegaConf object access with fallback
+    expected_latent_channels = getattr(vae_config, 'latent_channels', 16)
     is_compatible, compat_msg = validate_vae_compatibility(
         vae_checkpoint_path,
-        expected_latent_channels=vae_config.get('latent_channels', 16),
+        expected_latent_channels=expected_latent_channels,
         expected_spatial_downsample=spatial_downsample_factor,
         expected_temporal_downsample=temporal_downsample_factor,
         debug=debug
