@@ -499,6 +499,46 @@ def manage_model_device(model: Optional[torch.nn.Module], target_device: str,
     )
 
 
+def _has_meta_device_params(model: torch.nn.Module) -> bool:
+    """
+    Check if model has any parameters on meta device.
+    
+    Args:
+        model: Model to check
+        
+    Returns:
+        bool: True if any parameters are on meta device
+    """
+    return any(param.device.type == 'meta' for param in model.parameters())
+
+
+def _move_model_from_meta(model: torch.nn.Module, target_device: str, 
+                         model_name: str, debug: Optional[Any]) -> None:
+    """
+    Move a model from meta device to target device using safe method.
+    
+    Args:
+        model: Model to move
+        target_device: Target device string
+        model_name: Model name for logging
+        debug: Debug instance
+    """
+    if debug:
+        debug.log(f"{model_name} has meta device parameters, using to_empty() for movement", category="general")
+    
+    # Save the current state dict
+    state_dict = model.state_dict()
+    
+    # Move the model structure to target device
+    model.to_empty(device=target_device)
+    
+    # Reload the state dict onto the new device
+    model.load_state_dict(state_dict, assign=True)
+    
+    # Clean up the temporary state dict
+    del state_dict
+
+
 def _handle_blockswap_model_movement(runner: Any, model: torch.nn.Module, 
                                     current_device: torch.device, target_device: str, 
                                     target_type: str, model_name: str,
@@ -536,29 +576,9 @@ def _handle_blockswap_model_movement(runner: Any, model: torch.nn.Module,
         if debug:
             debug.start_timer(timer_name)
         
-        # Check if model has any parameters on meta device
-        has_meta_params = any(
-            param.device.type == 'meta' 
-            for param in model.parameters()
-        )
-        
         # Move entire model to CPU using appropriate method
-        if has_meta_params:
-            # For models with meta device parameters, use to_empty() then load state dict
-            if debug:
-                debug.log(f"{model_name} has meta device parameters, using to_empty() for movement", category="general")
-            
-            # Save the current state dict
-            state_dict = model.state_dict()
-            
-            # Move the model structure to CPU
-            model.to_empty(device="cpu")
-            
-            # Reload the state dict onto CPU
-            model.load_state_dict(state_dict, assign=True)
-            
-            # Clean up the temporary state dict
-            del state_dict
+        if _has_meta_device_params(model):
+            _move_model_from_meta(model, "cpu", model_name, debug)
         else:
             # Standard movement for non-meta models
             model.to("cpu")
@@ -665,29 +685,9 @@ def _standard_model_movement(model: torch.nn.Module, current_device: torch.devic
     if debug:
         debug.start_timer(timer_name)
     
-    # Check if model has any parameters on meta device
-    has_meta_params = any(
-        param.device.type == 'meta' 
-        for param in model.parameters()
-    )
-    
     # Move model using appropriate method
-    if has_meta_params:
-        # For models with meta device parameters, use to_empty() then load state dict
-        if debug:
-            debug.log(f"{model_name} has meta device parameters, using to_empty() for movement", category="general")
-        
-        # Save the current state dict
-        state_dict = model.state_dict()
-        
-        # Move the model structure to target device
-        model.to_empty(device=target_device)
-        
-        # Reload the state dict onto the new device
-        model.load_state_dict(state_dict, assign=True)
-        
-        # Clean up the temporary state dict
-        del state_dict
+    if _has_meta_device_params(model):
+        _move_model_from_meta(model, target_device, model_name, debug)
     else:
         # Standard movement for non-meta models
         model.to(target_device)
