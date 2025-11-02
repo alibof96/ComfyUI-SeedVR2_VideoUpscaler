@@ -536,8 +536,33 @@ def _handle_blockswap_model_movement(runner: Any, model: torch.nn.Module,
         if debug:
             debug.start_timer(timer_name)
         
-        # Move entire model to CPU
-        model.to("cpu")
+        # Check if model has any parameters on meta device
+        has_meta_params = any(
+            param.device.type == 'meta' 
+            for param in model.parameters()
+        )
+        
+        # Move entire model to CPU using appropriate method
+        if has_meta_params:
+            # For models with meta device parameters, use to_empty() then load state dict
+            if debug:
+                debug.log(f"{model_name} has meta device parameters, using to_empty() for movement", category="general")
+            
+            # Save the current state dict
+            state_dict = model.state_dict()
+            
+            # Move the model structure to CPU
+            model.to_empty(device="cpu")
+            
+            # Reload the state dict onto CPU
+            model.load_state_dict(state_dict, assign=True)
+            
+            # Clean up the temporary state dict
+            del state_dict
+        else:
+            # Standard movement for non-meta models
+            model.to("cpu")
+        
         model.zero_grad(set_to_none=True)
         
         if debug:
@@ -640,8 +665,33 @@ def _standard_model_movement(model: torch.nn.Module, current_device: torch.devic
     if debug:
         debug.start_timer(timer_name)
     
-    # Move model and clear gradients
-    model.to(target_device)
+    # Check if model has any parameters on meta device
+    has_meta_params = any(
+        param.device.type == 'meta' 
+        for param in model.parameters()
+    )
+    
+    # Move model using appropriate method
+    if has_meta_params:
+        # For models with meta device parameters, use to_empty() then load state dict
+        if debug:
+            debug.log(f"{model_name} has meta device parameters, using to_empty() for movement", category="general")
+        
+        # Save the current state dict
+        state_dict = model.state_dict()
+        
+        # Move the model structure to target device
+        model.to_empty(device=target_device)
+        
+        # Reload the state dict onto the new device
+        model.load_state_dict(state_dict, assign=True)
+        
+        # Clean up the temporary state dict
+        del state_dict
+    else:
+        # Standard movement for non-meta models
+        model.to(target_device)
+    
     model.zero_grad(set_to_none=True)
     
     # Clear VAE memory buffers when moving to CPU
