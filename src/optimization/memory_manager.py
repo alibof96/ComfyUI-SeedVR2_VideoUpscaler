@@ -499,6 +499,55 @@ def manage_model_device(model: Optional[torch.nn.Module], target_device: str,
     )
 
 
+def _has_meta_device_params(model: torch.nn.Module) -> bool:
+    """
+    Check if model has any parameters on meta device.
+    Uses short-circuit evaluation to stop on first meta parameter found.
+    
+    Args:
+        model: Model to check
+        
+    Returns:
+        bool: True if any parameters are on meta device
+    """
+    return next((True for param in model.parameters() if param.device.type == 'meta'), False)
+
+
+def _move_model_from_meta(model: torch.nn.Module, target_device: str, 
+                         model_name: str, debug: Optional[Any]) -> None:
+    """
+    Move a model from meta device to target device using safe method.
+    
+    This function uses the PyTorch-recommended pattern for moving models
+    from meta device: to_empty() followed by load_state_dict() with assign=True.
+    While state_dict() creates references to all parameters, this is necessary
+    as PyTorch doesn't support direct .to() movement from meta device.
+    
+    Args:
+        model: Model to move
+        target_device: Target device string
+        model_name: Model name for logging
+        debug: Debug instance
+    """
+    if debug:
+        debug.log(f"{model_name} has meta device parameters, using to_empty() for movement", category="general")
+    
+    # Save the current state dict (collects references to materialized parameters)
+    # Note: Most parameters should already be materialized at this point from
+    # the initial model loading, so this primarily handles the module structure
+    state_dict = model.state_dict()
+    
+    # Move the model structure to target device (creates empty tensors)
+    model.to_empty(device=target_device)
+    
+    # Reload the state dict onto the new device (moves actual data)
+    # assign=True avoids unnecessary copies
+    model.load_state_dict(state_dict, assign=True)
+    
+    # Clean up the temporary state dict
+    del state_dict
+
+
 def _handle_blockswap_model_movement(runner: Any, model: torch.nn.Module, 
                                     current_device: torch.device, target_device: str, 
                                     target_type: str, model_name: str,
@@ -536,8 +585,13 @@ def _handle_blockswap_model_movement(runner: Any, model: torch.nn.Module,
         if debug:
             debug.start_timer(timer_name)
         
-        # Move entire model to CPU
-        model.to("cpu")
+        # Move entire model to CPU using appropriate method
+        if _has_meta_device_params(model):
+            _move_model_from_meta(model, "cpu", model_name, debug)
+        else:
+            # Standard movement for non-meta models
+            model.to("cpu")
+        
         model.zero_grad(set_to_none=True)
         
         if debug:
@@ -640,8 +694,13 @@ def _standard_model_movement(model: torch.nn.Module, current_device: torch.devic
     if debug:
         debug.start_timer(timer_name)
     
-    # Move model and clear gradients
-    model.to(target_device)
+    # Move model using appropriate method
+    if _has_meta_device_params(model):
+        _move_model_from_meta(model, target_device, model_name, debug)
+    else:
+        # Standard movement for non-meta models
+        model.to(target_device)
+    
     model.zero_grad(set_to_none=True)
     
     # Clear VAE memory buffers when moving to CPU
