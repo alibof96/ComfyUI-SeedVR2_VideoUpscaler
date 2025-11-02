@@ -308,6 +308,7 @@ def setup_device_environment(device: Optional[str] = None,
 def prepare_runner(model_name: str, model_dir: str, preserve_vram: bool, 
                   debug: 'Debug', cache_model: bool = False, 
                   block_swap_config: Optional[Dict[str, Any]] = None,
+                  vae_model: Optional[str] = None,
                   vae_tiling_enabled: bool = False, 
                   vae_tile_size: Tuple[int, int] = (512, 512), 
                   vae_tile_overlap: Tuple[int, int] = (64, 64), 
@@ -323,6 +324,7 @@ def prepare_runner(model_name: str, model_dir: str, preserve_vram: bool,
         debug: Debug instance
         cache_model: Whether to cache model between runs
         block_swap_config: BlockSwap configuration
+        vae_model: Optional VAE model name to use (overrides config default)
         vae_tiling_enabled: Enable VAE tiling
         vae_tile_size: VAE tile dimensions
         vae_tile_overlap: VAE tile overlap
@@ -348,6 +350,7 @@ def prepare_runner(model_name: str, model_dir: str, preserve_vram: bool,
         model_name, model_dir, preserve_vram, debug,
         cache_model=cache_model,
         block_swap_config=block_swap_config,
+        vae_model=vae_model,
         vae_tiling_enabled=vae_tiling_enabled,
         vae_tile_size=vae_tile_size,
         vae_tile_overlap=vae_tile_overlap,

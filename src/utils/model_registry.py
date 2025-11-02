@@ -49,6 +49,7 @@ MODEL_REGISTRY = {
     
     # VAE models
     "ema_vae_fp16.safetensors": ModelInfo(category="vae", precision="fp16", sha256="20678548f420d98d26f11442d3528f8b8c94e57ee046ef93dbb7633da8612ca1"),
+    "taew2_1.safetensors": ModelInfo(repo="lightx2v/Autoencoders", category="vae", precision="fp16", variant="lightvae", sha256=None),  # LightVAE temporal autoencoder from LightX2V project
 }
 
 # Configuration constants
@@ -58,6 +59,10 @@ DEFAULT_VAE = "ema_vae_fp16.safetensors"
 def get_default_models() -> List[str]:
     """Get list of default models (non-VAE)"""
     return [name for name, info in MODEL_REGISTRY.items() if info.category == "model"]
+
+def get_default_vaes() -> List[str]:
+    """Get list of default VAE models"""
+    return [name for name, info in MODEL_REGISTRY.items() if info.category == "vae"]
 
 def get_model_repo(model_name: str) -> str:
     """Get repository for a specific model"""
@@ -83,3 +88,24 @@ def get_available_models() -> List[str]:
         pass
     
     return model_list
+
+def get_available_vaes() -> List[str]:
+    """Get all available VAE models including those discovered on disk"""
+    vae_list = get_default_vaes()
+    
+    try:
+        # Get all model files from all paths
+        model_files = get_all_model_files()
+        
+        # Add VAE files not in registry (by extension pattern)
+        discovered_vaes = [
+            filename for filename in model_files
+            if filename not in MODEL_REGISTRY and 'vae' in filename.lower()
+        ]
+        
+        # Add discovered VAE models to the list
+        vae_list.extend(sorted(discovered_vaes))
+    except:
+        pass
+    
+    return vae_list
