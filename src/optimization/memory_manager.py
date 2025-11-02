@@ -502,6 +502,7 @@ def manage_model_device(model: Optional[torch.nn.Module], target_device: str,
 def _has_meta_device_params(model: torch.nn.Module) -> bool:
     """
     Check if model has any parameters on meta device.
+    Uses short-circuit evaluation to stop on first meta parameter found.
     
     Args:
         model: Model to check
@@ -509,13 +510,18 @@ def _has_meta_device_params(model: torch.nn.Module) -> bool:
     Returns:
         bool: True if any parameters are on meta device
     """
-    return any(param.device.type == 'meta' for param in model.parameters())
+    return next((True for param in model.parameters() if param.device.type == 'meta'), False)
 
 
 def _move_model_from_meta(model: torch.nn.Module, target_device: str, 
                          model_name: str, debug: Optional[Any]) -> None:
     """
     Move a model from meta device to target device using safe method.
+    
+    This function uses the PyTorch-recommended pattern for moving models
+    from meta device: to_empty() followed by load_state_dict() with assign=True.
+    While state_dict() creates references to all parameters, this is necessary
+    as PyTorch doesn't support direct .to() movement from meta device.
     
     Args:
         model: Model to move
@@ -526,13 +532,16 @@ def _move_model_from_meta(model: torch.nn.Module, target_device: str,
     if debug:
         debug.log(f"{model_name} has meta device parameters, using to_empty() for movement", category="general")
     
-    # Save the current state dict
+    # Save the current state dict (collects references to materialized parameters)
+    # Note: Most parameters should already be materialized at this point from
+    # the initial model loading, so this primarily handles the module structure
     state_dict = model.state_dict()
     
-    # Move the model structure to target device
+    # Move the model structure to target device (creates empty tensors)
     model.to_empty(device=target_device)
     
-    # Reload the state dict onto the new device
+    # Reload the state dict onto the new device (moves actual data)
+    # assign=True avoids unnecessary copies
     model.load_state_dict(state_dict, assign=True)
     
     # Clean up the temporary state dict
