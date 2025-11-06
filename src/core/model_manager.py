@@ -44,6 +44,7 @@ except ImportError:
     GGMLQuantizationType = None
 
 from ..utils.constants import get_script_directory, find_model_file, suppress_tensor_warnings
+from ..utils.vae_compatibility import validate_vae_compatibility
 from ..optimization.memory_manager import clear_memory
 from ..optimization.compatibility import FP8CompatibleDiT
 from ..common.config import load_config, create_object
@@ -57,7 +58,8 @@ script_directory = get_script_directory()
 
 def configure_runner(model: str, base_cache_dir: str, preserve_vram: bool = False, debug: Optional[Debug] = None, 
                     cache_model: bool = False, block_swap_config: Optional[Dict[str, Any]] = None, 
-                    cached_runner: Optional[VideoDiffusionInfer] = None, vae_tiling_enabled: bool = False,
+                    cached_runner: Optional[VideoDiffusionInfer] = None, vae_model: Optional[str] = None,
+                    vae_tiling_enabled: bool = False,
                     vae_tile_size: Optional[Tuple[int, int]] = None, 
                     vae_tile_overlap: Optional[Tuple[int, int]] = None) -> VideoDiffusionInfer:
     """
@@ -71,6 +73,10 @@ def configure_runner(model: str, base_cache_dir: str, preserve_vram: bool = Fals
         cache_model (bool): Enable model caching
         block_swap_config (dict): Optional BlockSwap configuration
         cached_runner: Optional cached runner to reuse entirely (not just DiT)
+        vae_model (str): Optional VAE model filename (overrides config default)
+        vae_tiling_enabled (bool): Enable VAE tiling
+        vae_tile_size (tuple): VAE tile dimensions
+        vae_tile_overlap (tuple): VAE tile overlap
         
     Returns:
         VideoDiffusionInfer: Configured runner instance ready for inference
@@ -211,7 +217,28 @@ def configure_runner(model: str, base_cache_dir: str, preserve_vram: bool = Fals
                     category="precision", force=True)
     
     debug.start_timer("vae_model_infer")
-    vae_checkpoint_path = find_model_file(config.vae.checkpoint, base_cache_dir)
+    # Override VAE model if specified, otherwise use config default
+    vae_checkpoint_name = vae_model if vae_model else config.vae.checkpoint
+    if vae_model:
+        debug.log(f"Using custom VAE model: {vae_model}", category="vae", force=True)
+    vae_checkpoint_path = find_model_file(vae_checkpoint_name, base_cache_dir)
+    
+    # Validate VAE compatibility
+    debug.log(f"Validating VAE compatibility: {vae_checkpoint_name}", category="vae")
+    # Use getattr for OmegaConf object access with fallback
+    expected_latent_channels = getattr(vae_config, 'latent_channels', 16)
+    is_compatible, compat_msg = validate_vae_compatibility(
+        vae_checkpoint_path,
+        expected_latent_channels=expected_latent_channels,
+        expected_spatial_downsample=spatial_downsample_factor,
+        expected_temporal_downsample=temporal_downsample_factor,
+        debug=debug
+    )
+    
+    if not is_compatible:
+        debug.log(f"VAE compatibility warning: {compat_msg}", level="WARNING", category="vae", force=True)
+        debug.log("Proceeding with VAE loading, but results may be unexpected", level="WARNING", category="vae", force=True)
+    
     vae_override_dtype = getattr(torch, config.vae.dtype) if torch.mps.is_available() else None
     runner = configure_model_inference(runner, "vae", device, vae_checkpoint_path, config,
                                    preserve_vram, debug=debug, override_dtype=vae_override_dtype)

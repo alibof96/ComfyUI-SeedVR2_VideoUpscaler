@@ -44,6 +44,15 @@ Can run as **Multi-GPU standalone** too, see [🖥️ Run as Standalone](#️-ru
 
 ## 🚀 Updates
 
+**2025.02.02**
+
+- 🎨 **Multiple VAE Support**: Added support for alternative VAE models including LightVAE's taew2_1.safetensors
+- ✅ **VAE Compatibility Validation**: Automatic shape and dimension validation for custom VAE models
+- 📦 **VAE Selection Interface**: New VAE model selector in Extra Args node for easy switching between models
+- 📚 **Documentation**: Added comprehensive VAE integration guide in `docs/VAE_INTEGRATION.md`
+
+## 🚀 Previous Updates
+
 **2025.01.30**
 
 - 🎯 **Unified Debug System**: New structured logging with categories, timers, and memory tracking. `enable_debug` now available on main node
@@ -95,6 +104,7 @@ Can run as **Multi-GPU standalone** too, see [🖥️ Run as Standalone](#️-ru
 ## 🎯 Features
 
 - High-quality Upscaling
+- Multiple VAE Support (including LightVAE for faster/lower memory processing) - See [VAE Integration Guide](docs/VAE_INTEGRATION.md)
 - Suitable for any video length once the right settings are found
 - Model Will Be Download Automatically from [Models](https://huggingface.co/numz/SeedVR2_comfyUI/tree/main)
 - Standalone mode

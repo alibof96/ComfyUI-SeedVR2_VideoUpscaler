@@ -11,7 +11,9 @@ from ..utils.constants import get_base_cache_dir, get_script_directory
 from ..utils.downloads import download_weight
 from ..utils.model_registry import (
     get_available_models,
-    DEFAULT_MODEL
+    get_available_vaes,
+    DEFAULT_MODEL,
+    DEFAULT_VAE
 )
 from ..utils.debug import Debug
 from ..core.model_manager import configure_runner
@@ -136,6 +138,7 @@ class SeedVR2:
         temporal_overlap = 0 
         
         if extra_args is None:
+            vae_model = DEFAULT_VAE
             tiled_vae = False
             vae_tile_size = 512
             vae_tile_overlap = 64
@@ -145,6 +148,7 @@ class SeedVR2:
             devices = get_device_list()
             device = devices[0]
         else:
+            vae_model = extra_args.get("vae_model", DEFAULT_VAE)
             tiled_vae = extra_args["tiled_vae"]
             vae_tile_size = extra_args["vae_tile_size"]
             vae_tile_overlap = extra_args["vae_tile_overlap"]
@@ -182,16 +186,35 @@ class SeedVR2:
         self.debug.log_memory_state("Before model preparation", show_tensors=True, detailed_tensors=False)
         self.debug.start_timer("model_preparation")
 
-        # Check if download succeeded
+        # Check if download succeeded for model
         if not download_weight(model, debug=self.debug):
             raise RuntimeError(
                 f"Required files for {model} are not available. "
                 "Please check the console output for manual download instructions."
             )
+        
+        # Download custom VAE if specified and different from default
+        if vae_model and vae_model != DEFAULT_VAE:
+            from ..utils.constants import find_model_file
+            # Check if VAE exists locally
+            try:
+                vae_path = find_model_file(vae_model, get_base_cache_dir())
+                if not os.path.exists(vae_path):
+                    # Try to download
+                    if not download_weight(vae_model, debug=self.debug):
+                        raise RuntimeError(
+                            f"VAE model {vae_model} not found locally and download failed. "
+                            f"Please download manually to ComfyUI/models/SEEDVR2/"
+                        )
+            except Exception as e:
+                self.debug.log(f"Error checking/downloading VAE {vae_model}: {e}", 
+                             level="WARNING", category="setup", force=True)
+                self.debug.log("Will attempt to proceed with pipeline, but may fail if VAE is not found", 
+                             level="WARNING", category="setup", force=True)
 
         cfg_scale = 1.0
         try:
-            return self._internal_execute(images, model, seed, new_resolution, cfg_scale, 
+            return self._internal_execute(images, model, vae_model, seed, new_resolution, cfg_scale, 
                                         batch_size, color_correction, input_noise_scale, latent_noise_scale, 
                                         tiled_vae, vae_tile_size, vae_tile_overlap, 
                                         preserve_vram, temporal_overlap, 
@@ -240,7 +263,7 @@ class SeedVR2:
             self.current_model_name = ""
 
 
-    def _internal_execute(self, images, model, seed, new_resolution, cfg_scale, batch_size,
+    def _internal_execute(self, images, model, vae_model, seed, new_resolution, cfg_scale, batch_size,
                 color_correction, input_noise_scale, latent_noise_scale, tiled_vae, vae_tile_size, vae_tile_overlap,
                 preserve_vram, temporal_overlap, cache_model, device, block_swap_config) -> Tuple[torch.Tensor]:
         """Internal execution logic with progress tracking"""
@@ -265,6 +288,7 @@ class SeedVR2:
             model, get_base_cache_dir(), preserve_vram, debug,
             cache_model=cache_model,
             block_swap_config=block_swap_config,
+            vae_model=vae_model,
             vae_tiling_enabled=tiled_vae,
             vae_tile_size=(vae_tile_size, vae_tile_size),
             vae_tile_overlap=(vae_tile_overlap, vae_tile_overlap),
@@ -518,6 +542,10 @@ class SeedVR2ExtraArgs:
         devices = get_device_list()
         return {
             "required": {
+                "vae_model": (get_available_vaes(), {
+                    "default": DEFAULT_VAE,
+                    "tooltip": "VAE/Autoencoder model for encoding/decoding latents. Options include ema_vae_fp16.safetensors (default, high quality) and taew2_1.safetensors (LightVAE, faster/lower memory). Models will auto-download on first use."
+                }),
                 "tiled_vae": ("BOOLEAN", {
                     "default": False,
                     "tooltip": "Process VAE in tiles to reduce VRAM usage but slower with potential artifacts. Only enable if running out of memory."
@@ -557,8 +585,9 @@ class SeedVR2ExtraArgs:
     CATEGORY = "SEEDVR2"
     DESCRIPTION = "Configure extra args."
     
-    def create_config(self, tiled_vae, vae_tile_size, vae_tile_overlap, preserve_vram, cache_model, enable_debug, device):
+    def create_config(self, vae_model, tiled_vae, vae_tile_size, vae_tile_overlap, preserve_vram, cache_model, enable_debug, device):
         config = {
+            "vae_model": vae_model,
             "tiled_vae": tiled_vae,
             "vae_tile_size": vae_tile_size,
             "vae_tile_overlap": vae_tile_overlap,
